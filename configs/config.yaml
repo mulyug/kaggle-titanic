@@ -1,0 +1,37 @@
+general:
+  experiment_name: baseline
+  seed: 0
+
+data:
+  train_path: data/raw/train.csv
+  test_path: data/raw/test.csv
+
+target:
+  column: Survived
+
+validation:
+  n_splits: 5
+  shuffle: true
+
+evaluation:
+  metric: accuracy
+
+models:
+  logistic_regression:
+    enabled: true
+    params:
+      C: 1.0
+      max_iter: 1000
+
+  catboost:
+    enabled: true
+    params:
+      iterations: 500
+      learning_rate: 0.03
+      depth: 6
+      loss_function: Logloss
+      verbose: false
+
+output:
+  results_path: outputs/results.csv
+  submission_dir: outputs/submissions
