@@ -1,7 +1,8 @@
 from omegaconf import OmegaConf
 
-from src.data import load_data
 from src.utils import set_seed
+from src.data import load_data
+from src.features import prepare_features
 
 
 def main():
@@ -12,8 +13,16 @@ def main():
     train = load_data(config.data.train_path)
     test = load_data(config.data.test_path)
 
-    print(f"Train shape: {train.shape}")
-    print(f"Test shape: {test.shape}")
+    X, y = prepare_features(
+        train,
+        config.target.column,
+    )
+
+    X_test = test[X.columns].copy()
+
+    print(f"X shape: {X.shape}")
+    print(f"y shape: {y.shape}")
+    print(f"X_test shape: {X_test.shape}")
 
 
 if __name__ == "__main__":
