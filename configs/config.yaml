@@ -45,6 +45,17 @@ models:
         C: 1.0
         kernel: rbf
 
+  random_forest:
+    enabled: true
+    params:
+      random_state: ${general.seed}
+
+  xgboost:
+    enabled: true
+    params:
+      random_state: ${general.seed}
+      n_jobs: 1
+
   catboost:
     enabled: true
     params:
@@ -53,6 +64,7 @@ models:
       depth: 6
       loss_function: Logloss
       verbose: false
+      random_seed: ${general.seed}
 
 output:
   results_path: outputs/results.csv
