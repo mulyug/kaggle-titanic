@@ -40,10 +40,10 @@ models:
       n_neighbors: 5
 
   svm:
-      enabled: true
-      params:
-        C: 1.0
-        kernel: rbf
+    enabled: true
+    params:
+      C: 1.0
+      kernel: rbf
 
   random_forest:
     enabled: true
