@@ -5,13 +5,17 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
-def create_numeric_preprocessor() -> Pipeline:
+def create_numeric_preprocessor(scale: bool = True) -> Pipeline:
     """Create preprocessing for numerical features."""
 
-    return Pipeline([
+    steps = [
         ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", StandardScaler()),
-    ])
+    ]
+
+    if scale:
+        steps.append(("scaler", StandardScaler()))
+
+    return Pipeline(steps)
 
 
 def create_categorical_preprocessor() -> Pipeline:
@@ -31,6 +35,18 @@ def create_standard_preprocessor(
 
     return ColumnTransformer([
         ("numerical", create_numeric_preprocessor(), numerical_features),
+        ("categorical", create_categorical_preprocessor(), categorical_features),
+    ])
+
+
+def create_tree_preprocessor(
+    numerical_features: list[str],
+    categorical_features: list[str],
+) -> ColumnTransformer:
+    """Create preprocessing for tree-based models without feature scaling."""
+
+    return ColumnTransformer([
+        ("numerical", create_numeric_preprocessor(scale=False), numerical_features),
         ("categorical", create_categorical_preprocessor(), categorical_features),
     ])
 
