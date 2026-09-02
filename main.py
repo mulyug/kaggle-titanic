@@ -55,30 +55,36 @@ def main():
             **config.models.logistic_regression.params,
         )
 
-        models["logistic_regression"] = create_pipeline(
-            model=model,
-            preprocessor=standard_preprocessor,
-        )
+        models["logistic_regression"] = {
+            "pipeline": create_pipeline(
+                model=model,
+                preprocessor=standard_preprocessor,
+            ),
+        }
 
     if config.models.knn.enabled:
         model = KNeighborsClassifier(
             **config.models.knn.params,
         )
 
-        models["knn"] = create_pipeline(
-            model=model,
-            preprocessor=standard_preprocessor,
-        )
+        models["knn"] = {
+            "pipeline": create_pipeline(
+                model=model,
+                preprocessor=standard_preprocessor,
+            ),
+        }
 
     if config.models.svm.enabled:
         model = SVC(
             **config.models.svm.params,
         )
 
-        models["svm"] = create_pipeline(
-            model=model,
-            preprocessor=standard_preprocessor,
-        )
+        models["svm"] = {
+            "pipeline": create_pipeline(
+                model=model,
+                preprocessor=standard_preprocessor,
+            ),
+        }
 
     if config.models.catboost.enabled:
         model = CatBoostClassifier(
@@ -93,10 +99,15 @@ def main():
             },
         )
 
-        models["catboost"] = create_pipeline(
-            model=model,
-            preprocessor=catboost_preprocessor,
-        )
+        models["catboost"] = {
+            "pipeline": create_pipeline(
+                model=model,
+                preprocessor=catboost_preprocessor,
+            ),
+            "fit_params": {
+                "classifier__cat_features": categorical_features,
+            },
+        }
 
     cv = StratifiedKFold(
         n_splits=config.validation.n_splits,
@@ -106,21 +117,14 @@ def main():
 
     results = []
 
-    for model_name, model_pipeline in models.items():
-        fit_params = None
-
-        if model_name == "catboost":
-            fit_params = {
-                "classifier__cat_features": categorical_features,
-            }
-
+    for model_name, model_spec in models.items():
         score = evaluate(
-            model_pipeline=model_pipeline,
+            model_pipeline=model_spec["pipeline"],
             X=X,
             y=y,
             cv=cv,
             scoring=config.evaluation.metric,
-            fit_params=fit_params
+            fit_params=model_spec.get("fit_params"),
         )
 
         score["model"] = model_name

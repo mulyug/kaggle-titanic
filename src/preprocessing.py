@@ -29,8 +29,6 @@ def create_standard_preprocessor(
 ) -> ColumnTransformer:
     """Create a combined preprocessing pipeline."""
 
-    print('Preprocessing features..')
-
     return ColumnTransformer([
         ("numerical", create_numeric_preprocessor(), numerical_features),
         ("categorical", create_categorical_preprocessor(), categorical_features),
@@ -39,8 +37,6 @@ def create_standard_preprocessor(
 
 def fill_categorical_missing(X: pd.DataFrame, categorical_features: list[str]) -> pd.DataFrame:
     """Replace missing categorical values with an explicit category."""
-
-    print('Preprocessing features..')
 
     X = X.copy()
     X[categorical_features] = X[categorical_features].fillna("Missing")
