@@ -1,6 +1,10 @@
 from omegaconf import OmegaConf
+import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
+from catboost import CatBoostClassifier
 
 from src.utils import set_seed
 from src.data import load_data
@@ -16,7 +20,7 @@ def main():
     set_seed(config.general.seed)
 
     train = load_data(config.data.train_path)
-    test = load_data(config.data.test_path)
+    # test = load_data(config.data.test_path)
 
     X, y = prepare_features(
         train,
@@ -36,19 +40,42 @@ def main():
         "Embarked",
     ]
 
-    preprocessor = create_standard_preprocessor(
+    standard_preprocessor = create_standard_preprocessor(
         numerical_features=numerical_features,
         categorical_features=categorical_features,
     )
 
-    model = LogisticRegression(
-        **config.models.logistic_regression.params,
-    )
+    models = {}
 
-    pipeline = create_pipeline(
-        model=model,
-        preprocessor=preprocessor,
-    )
+    if config.models.logistic_regression.enabled:
+        model = LogisticRegression(
+            **config.models.logistic_regression.params,
+        )
+
+        models["logistic_regression"] = create_pipeline(
+            model=model,
+            preprocessor=standard_preprocessor,
+        )
+
+    if config.models.knn.enabled:
+        model = KNeighborsClassifier(
+            **config.models.knn.params,
+        )
+
+        models["knn"] = create_pipeline(
+            model=model,
+            preprocessor=standard_preprocessor,
+        )
+
+    if config.models.svm.enabled:
+        model = SVC(
+            **config.models.svm.params,
+        )
+
+        models["svm"] = create_pipeline(
+            model=model,
+            preprocessor=standard_preprocessor,
+        )
 
     cv = StratifiedKFold(
         n_splits=config.validation.n_splits,
@@ -56,17 +83,30 @@ def main():
         random_state=config.general.seed,
     )
 
-    results = evaluate(
-        model_pipeline=pipeline,
-        X=X,
-        y=y,
-        cv=cv,
-        scoring=config.evaluation.metric,
-    )
+    results = []
 
-    results["model"] = "logistic_regression"
+    for model_name, model_pipeline in models.items():
+        score = evaluate(
+            model_pipeline=model_pipeline,
+            X=X,
+            y=y,
+            cv=cv,
+            scoring=config.evaluation.metric,
+        )
+
+        score["model"] = model_name
+        results.append(score)
+
+    results = pd.DataFrame(results)
+
+    results = results[["model", "mean_train_score", "mean_score", "std_score"]]
 
     print(results)
+
+    results.to_csv(
+        config.output.results_path,
+        index=False,
+    )
 
 
 if __name__ == "__main__":

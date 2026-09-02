@@ -13,7 +13,7 @@ def evaluate(
 ) -> dict:
     """Evaluate a model pipeline using cross-validation."""
 
-    print('Evaluating model using CV..')
+    print(f'Evaluating model ({model_pipeline[1]}) using CV..')
     start_time = time.time()
 
     scores = cross_validate(

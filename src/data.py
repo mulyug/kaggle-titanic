@@ -10,7 +10,7 @@ def load_data(path: str | Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Dataset not found: {path}")
 
-    print(f'Loading dataset {path}..')
+    print(f'Loading dataset: {path}..')
 
     df = pd.read_csv(path)
 

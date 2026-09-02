@@ -4,7 +4,7 @@ from sklearn.pipeline import Pipeline
 def create_pipeline(model, preprocessor=None) -> Pipeline:
     """Create a pipeline combining preprocessing and a model."""
 
-    print('Creating pipeline..')
+    print(f'Creating pipeline for {model}..')
 
     if preprocessor is None:
         return Pipeline([
