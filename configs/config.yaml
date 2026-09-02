@@ -9,6 +9,17 @@ data:
 target:
   column: Survived
 
+features:
+  numerical:
+    - Age
+    - SibSp
+    - Parch
+    - Fare
+  categorical:
+    - Pclass
+    - Sex
+    - Embarked
+
 validation:
   n_splits: 5
   shuffle: true

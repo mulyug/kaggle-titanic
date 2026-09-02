@@ -23,23 +23,15 @@ def main():
     train = load_data(config.data.train_path)
     # test = load_data(config.data.test_path)
 
+    numerical_features = list(config.features.numerical)
+    categorical_features = list(config.features.categorical)
+    feature_columns = [*numerical_features, *categorical_features]
+
     X, y = prepare_features(
-        train,
-        config.target.column,
+        data=train,
+        target_column=config.target.column,
+        feature_columns=feature_columns,
     )
-
-    numerical_features = [
-        "Age",
-        "SibSp",
-        "Parch",
-        "Fare",
-    ]
-
-    categorical_features = [
-        "Pclass",
-        "Sex",
-        "Embarked",
-    ]
 
     standard_preprocessor = create_standard_preprocessor(
         numerical_features=numerical_features,
