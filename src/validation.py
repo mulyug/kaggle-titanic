@@ -10,11 +10,14 @@ def evaluate(
     y: pd.Series,
     cv,
     scoring: str,
+    fit_params: dict | None = None
 ) -> dict:
     """Evaluate a model pipeline using cross-validation."""
 
     print(f'Evaluating model ({model_pipeline[1]}) using CV..')
     start_time = time.time()
+
+    params = fit_params or {}
 
     scores = cross_validate(
         estimator=model_pipeline,
@@ -23,6 +26,7 @@ def evaluate(
         cv=cv,
         scoring=scoring,
         return_train_score=True,
+        params=params,
     )
 
     diff_time = int(time.time() - start_time)

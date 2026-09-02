@@ -1,6 +1,7 @@
 from omegaconf import OmegaConf
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
+from sklearn.preprocessing import FunctionTransformer
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
@@ -9,7 +10,7 @@ from catboost import CatBoostClassifier
 from src.utils import set_seed
 from src.data import load_data
 from src.features import prepare_features
-from src.preprocessing import create_standard_preprocessor
+from src.preprocessing import create_standard_preprocessor, fill_categorical_missing
 from src.models import create_pipeline
 from src.validation import evaluate
 
@@ -45,6 +46,8 @@ def main():
         categorical_features=categorical_features,
     )
 
+    # ---MODELS---
+
     models = {}
 
     if config.models.logistic_regression.enabled:
@@ -77,6 +80,24 @@ def main():
             preprocessor=standard_preprocessor,
         )
 
+    if config.models.catboost.enabled:
+        model = CatBoostClassifier(
+            **config.models.catboost.params,
+            random_seed=config.general.seed,
+        )
+
+        catboost_preprocessor = FunctionTransformer(
+            fill_categorical_missing,
+            kw_args={
+                "categorical_features": categorical_features,
+            },
+        )
+
+        models["catboost"] = create_pipeline(
+            model=model,
+            preprocessor=catboost_preprocessor,
+        )
+
     cv = StratifiedKFold(
         n_splits=config.validation.n_splits,
         shuffle=config.validation.shuffle,
@@ -86,12 +107,20 @@ def main():
     results = []
 
     for model_name, model_pipeline in models.items():
+        fit_params = None
+
+        if model_name == "catboost":
+            fit_params = {
+                "classifier__cat_features": categorical_features,
+            }
+
         score = evaluate(
             model_pipeline=model_pipeline,
             X=X,
             y=y,
             cv=cv,
             scoring=config.evaluation.metric,
+            fit_params=fit_params
         )
 
         score["model"] = model_name
