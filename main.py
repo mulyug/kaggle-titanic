@@ -1,8 +1,13 @@
 from omegaconf import OmegaConf
+from sklearn.model_selection import StratifiedKFold
+from sklearn.linear_model import LogisticRegression
 
 from src.utils import set_seed
 from src.data import load_data
 from src.features import prepare_features
+from src.preprocessing import create_standard_preprocessor
+from src.models import create_pipeline
+from src.validation import evaluate
 
 
 def main():
@@ -18,11 +23,50 @@ def main():
         config.target.column,
     )
 
-    X_test = test[X.columns].copy()
+    numerical_features = [
+        "Age",
+        "SibSp",
+        "Parch",
+        "Fare",
+    ]
 
-    print(f"X shape: {X.shape}")
-    print(f"y shape: {y.shape}")
-    print(f"X_test shape: {X_test.shape}")
+    categorical_features = [
+        "Pclass",
+        "Sex",
+        "Embarked",
+    ]
+
+    preprocessor = create_standard_preprocessor(
+        numerical_features=numerical_features,
+        categorical_features=categorical_features,
+    )
+
+    model = LogisticRegression(
+        **config.models.logistic_regression.params,
+    )
+
+    pipeline = create_pipeline(
+        model=model,
+        preprocessor=preprocessor,
+    )
+
+    cv = StratifiedKFold(
+        n_splits=config.validation.n_splits,
+        shuffle=config.validation.shuffle,
+        random_state=config.general.seed,
+    )
+
+    results = evaluate(
+        model_pipeline=pipeline,
+        X=X,
+        y=y,
+        cv=cv,
+        scoring=config.evaluation.metric,
+    )
+
+    results["model"] = "logistic_regression"
+
+    print(results)
 
 
 if __name__ == "__main__":
