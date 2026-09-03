@@ -40,10 +40,10 @@ def evaluate(
     results = {}
 
     for metric_name in scoring:
-        results[f"mean_{metric_name}"] = scores[f"test_{metric_name}"].mean()
+        results[f"mean_{metric_name}"] = round(scores[f"test_{metric_name}"].mean(), 4)
 
         if metric_name == primary_metric:
-            results[f"mean_train_{metric_name}"] = scores[f"train_{metric_name}"].mean()
-            results[f"std_{metric_name}"] = scores[f"test_{metric_name}"].std()
+            results[f"mean_train_{metric_name}"] = round(scores[f"train_{metric_name}"].mean(), 4)
+            results[f"std_{metric_name}"] = round(scores[f"test_{metric_name}"].std(), 4)
 
     return results
