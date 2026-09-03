@@ -25,7 +25,12 @@ validation:
   shuffle: true
 
 evaluation:
-  metric: accuracy
+  primary_metric: accuracy
+  metrics:
+    - accuracy
+    - precision
+    - recall
+    - roc_auc
 
 models:
   logistic_regression:

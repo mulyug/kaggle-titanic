@@ -58,16 +58,20 @@ def main():
             X=X,
             y=y,
             cv=cv,
-            scoring=config.evaluation.metric,
+            scoring=list(config.evaluation.metrics),
+            primary_metric=config.evaluation.primary_metric,
             fit_params=model_spec.fit_params,
         )
 
         score["model"] = model_name
         results.append(score)
 
-    results = pd.DataFrame(results)
-
-    results = results[["model", "mean_train_score", "mean_score", "std_score"]]
+    results = (
+        pd.DataFrame(results)
+        .set_index("model")
+        .sort_values(by=f"mean_{config.evaluation.primary_metric}", ascending=False)
+        .reset_index()
+    )
 
     print(results)
 

@@ -9,10 +9,11 @@ def evaluate(
     X: pd.DataFrame,
     y: pd.Series,
     cv,
-    scoring: str,
-    fit_params: dict | None = None
+    scoring: list[str],
+    primary_metric: str,
+    fit_params: dict | None = None,
 ) -> dict:
-    """Evaluate a model pipeline using cross-validation."""
+    """Evaluate a model pipeline with multiple cross-validation metrics."""
 
     print(f'Evaluating model ({model_pipeline[1]}) using CV..')
     start_time = time.time()
@@ -32,8 +33,16 @@ def evaluate(
     diff_time = int(time.time() - start_time)
     print(f'CV time: {diff_time} s')
 
-    return {
-        "mean_train_score": scores["train_score"].mean(),
-        "mean_score": scores["test_score"].mean(),
-        "std_score": scores["test_score"].std(),
-    }
+    if primary_metric not in scoring:
+        raise ValueError(f"Primary metric '{primary_metric}' is not in scoring")
+
+    results = {}
+
+    for metric_name in scoring:
+        results[f"mean_{metric_name}"] = scores[f"test_{metric_name}"].mean()
+
+        if metric_name == primary_metric:
+            results[f"mean_train_{metric_name}"] = scores[f"train_{metric_name}"].mean()
+            results[f"std_{metric_name}"] = scores[f"test_{metric_name}"].std()
+
+    return results
