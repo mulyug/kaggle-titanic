@@ -3,3 +3,6 @@ TaskNotes.md
 __pycache__/
 .ipynb_checkpoints/
 .DS_Store
+.idea/
+outputs/
+catboost_info/

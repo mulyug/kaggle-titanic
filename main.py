@@ -5,6 +5,7 @@ from sklearn.model_selection import StratifiedKFold
 from src.utils import set_seed
 from src.data import load_data
 from src.features import prepare_features
+from src.experiment_tracking import ExperimentTracker
 from src.preprocessing import create_standard_preprocessor, create_tree_preprocessor
 from src.models import create_models
 from src.validation import evaluate
@@ -15,70 +16,84 @@ def main():
 
     set_seed(config.general.seed)
 
-    train = load_data(config.data.train_path)
-    # test = load_data(config.data.test_path)
-
-    numerical_features = list(config.features.numerical)
-    categorical_features = list(config.features.categorical)
-    feature_columns = [*numerical_features, *categorical_features]
-
-    X, y = prepare_features(
-        data=train,
-        target_column=config.target.column,
-        feature_columns=feature_columns,
+    tracker = ExperimentTracker(
+        experiments_dir=config.output.experiments_dir,
+        experiment_name=config.general.experiment_name,
     )
+    run_dir = tracker.start(config)
+    print(f"Experiment artifacts: {run_dir}")
 
-    standard_preprocessor = create_standard_preprocessor(
-        numerical_features=numerical_features,
-        categorical_features=categorical_features,
-    )
-    tree_preprocessor = create_tree_preprocessor(
-        numerical_features=numerical_features,
-        categorical_features=categorical_features,
-    )
+    try:
+        train = load_data(config.data.train_path)
+        tracker.log_dataset("train", config.data.train_path, train.shape)
 
-    models = create_models(
-        config=config.models,
-        standard_preprocessor=standard_preprocessor,
-        tree_preprocessor=tree_preprocessor,
-        categorical_features=categorical_features,
-    )
-
-    cv = StratifiedKFold(
-        n_splits=config.validation.n_splits,
-        shuffle=config.validation.shuffle,
-        random_state=config.general.seed,
-    )
-
-    results = []
-
-    for model_name, model_spec in models.items():
-        score = evaluate(
-            model_pipeline=model_spec.pipeline,
-            X=X,
-            y=y,
-            cv=cv,
-            scoring=list(config.evaluation.metrics),
-            primary_metric=config.evaluation.primary_metric,
-            fit_params=model_spec.fit_params,
+        numerical_features = list(config.features.numerical)
+        categorical_features = list(config.features.categorical)
+        feature_columns = [*numerical_features, *categorical_features]
+        tracker.log_features(
+            target=config.target.column,
+            numerical=numerical_features,
+            categorical=categorical_features,
         )
 
-        score["model"] = model_name
-        results.append(score)
+        X, y = prepare_features(
+            data=train,
+            target_column=config.target.column,
+            feature_columns=feature_columns,
+        )
 
-    results = (
-        pd.DataFrame(results)
-        .set_index("model")
-        .sort_values(by=f"mean_{config.evaluation.primary_metric}", ascending=False)
-        .reset_index()
-    )
+        standard_preprocessor = create_standard_preprocessor(
+            numerical_features=numerical_features,
+            categorical_features=categorical_features,
+        )
+        tree_preprocessor = create_tree_preprocessor(
+            numerical_features=numerical_features,
+            categorical_features=categorical_features,
+        )
 
-    print(results)
+        models = create_models(
+            config=config.models,
+            standard_preprocessor=standard_preprocessor,
+            tree_preprocessor=tree_preprocessor,
+            categorical_features=categorical_features,
+        )
 
-    results.to_csv(
-        config.output.results_path,
-        index=False,
-    )
+        cv = StratifiedKFold(
+            n_splits=config.validation.n_splits,
+            shuffle=config.validation.shuffle,
+            random_state=config.general.seed,
+        )
+
+        results = []
+
+        for model_name, model_spec in models.items():
+            score = evaluate(
+                model_pipeline=model_spec.pipeline,
+                X=X,
+                y=y,
+                cv=cv,
+                scoring=list(config.evaluation.metrics),
+                primary_metric=config.evaluation.primary_metric,
+                fit_params=model_spec.fit_params,
+            )
+
+            score["model"] = model_name
+            results.append(score)
+            tracker.log(f"Evaluated model: {model_name}")
+
+        results = (
+            pd.DataFrame(results)
+            .set_index("model")
+            .sort_values(by=f"mean_{config.evaluation.primary_metric}", ascending=False)
+            .reset_index()
+        )
+
+        print(results)
+        tracker.log_results(results)
+        tracker.finish()
+    except Exception as error:
+        tracker.fail(error)
+        raise
 
 
 if __name__ == "__main__":

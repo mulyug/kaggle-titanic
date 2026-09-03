@@ -72,5 +72,5 @@ models:
       random_seed: ${general.seed}
 
 output:
-  results_path: outputs/results.csv
+  experiments_dir: outputs/experiments
   submission_dir: outputs/submissions
