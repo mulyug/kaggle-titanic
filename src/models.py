@@ -23,7 +23,7 @@ class ModelSpec:
 def create_pipeline(model, preprocessor=None) -> Pipeline:
     """Create a pipeline combining preprocessing and a model."""
 
-    print(f'Creating pipeline for {model}..')
+    print(f'Creating pipeline for {model.__class__.__name__}..')
 
     if preprocessor is None:
         return Pipeline([

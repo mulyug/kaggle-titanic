@@ -15,7 +15,8 @@ def evaluate(
 ) -> dict:
     """Evaluate a model pipeline with multiple cross-validation metrics."""
 
-    print(f'Evaluating model ({model_pipeline[1]}) using CV..')
+    model_name = model_pipeline.named_steps["classifier"].__class__.__name__
+    print(f'Evaluating model {model_name} using CV..')
     start_time = time.time()
 
     params = fit_params or {}
@@ -31,7 +32,7 @@ def evaluate(
     )
 
     diff_time = int(time.time() - start_time)
-    print(f'CV time: {diff_time} s')
+    print(f'CV time for {model_name}: {diff_time} s')
 
     if primary_metric not in scoring:
         raise ValueError(f"Primary metric '{primary_metric}' is not in scoring")
