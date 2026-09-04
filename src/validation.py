@@ -2,6 +2,10 @@ import time
 import pandas as pd
 from sklearn.model_selection import cross_validate
 from sklearn.pipeline import Pipeline
+from src.experiment_tracking import get_logger
+
+
+logger = get_logger()
 
 
 def evaluate(
@@ -16,7 +20,7 @@ def evaluate(
     """Evaluate a model pipeline with multiple cross-validation metrics."""
 
     model_name = model_pipeline.named_steps["classifier"].__class__.__name__
-    print(f'Evaluating model {model_name} using CV..')
+    logger.info("Evaluating model %s using CV", model_name)
     start_time = time.time()
 
     params = fit_params or {}
@@ -32,7 +36,7 @@ def evaluate(
     )
 
     diff_time = int(time.time() - start_time)
-    print(f'CV time for {model_name}: {diff_time} s')
+    logger.info("CV time for %s: %s s", model_name, diff_time)
 
     if primary_metric not in scoring:
         raise ValueError(f"Primary metric '{primary_metric}' is not in scoring")

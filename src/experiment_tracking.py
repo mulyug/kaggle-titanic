@@ -1,5 +1,6 @@
 import importlib.metadata
 import json
+import logging
 import platform
 import re
 import subprocess
@@ -9,6 +10,38 @@ from pathlib import Path
 
 import pandas as pd
 from omegaconf import OmegaConf
+LOGGER_NAME = "kaggle_titanic"
+
+
+def get_logger() -> logging.Logger:
+    """Return the project's shared logger."""
+
+    return logging.getLogger(LOGGER_NAME)
+
+
+def configure_logging(run_dir: Path) -> logging.Logger:
+    """Configure console and per-run file logging."""
+
+    logger = get_logger()
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    for handler in logger.handlers[:]:
+        handler.close()
+        logger.removeHandler(handler)
+
+    formatter = logging.Formatter(
+        "%(asctime)s | %(levelname)s | %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    file_handler = logging.FileHandler(run_dir / "run.log", encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    return logger
 
 
 class ExperimentTracker:
@@ -21,6 +54,7 @@ class ExperimentTracker:
         self.run_id = datetime.now().astimezone().strftime("%Y-%m-%d_%H:%M")
         self.run_dir = self.experiments_dir / experiment_name / self.run_id
         self.metadata: dict = {}
+        self.logger = get_logger()
 
     def start(self, config) -> Path:
         """Create a run directory and save the resolved experiment configuration."""
@@ -46,6 +80,7 @@ class ExperimentTracker:
             "datasets": {},
         }
         self._save_metadata()
+        self.logger = configure_logging(self.run_dir)
         self.log(f"Run started: {self.run_id}")
 
         return self.run_dir
@@ -103,10 +138,9 @@ class ExperimentTracker:
         self.log(f"Run failed: {type(error).__name__}: {error}")
 
     def log(self, message: str) -> None:
-        """Append a timestamped message to the run log."""
+        """Write a message to both the console and the current run log."""
 
-        with (self.run_dir / "run.log").open("a", encoding="utf-8") as log_file:
-            log_file.write(f"{self._timestamp()} | {message}\n")
+        self.logger.info(message)
 
     def _save_metadata(self) -> None:
         metadata_path = self.run_dir / "metadata.json"

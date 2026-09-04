@@ -5,7 +5,7 @@ from sklearn.model_selection import StratifiedKFold
 from src.utils import set_seed
 from src.data import load_data
 from src.features import prepare_features
-from src.experiment_tracking import ExperimentTracker
+from src.experiment_tracking import ExperimentTracker, get_logger
 from src.preprocessing import create_standard_preprocessor, create_tree_preprocessor
 from src.models import create_models
 from src.validation import evaluate
@@ -21,7 +21,8 @@ def main():
         experiment_name=config.general.experiment_name,
     )
     run_dir = tracker.start(config)
-    print(f"Experiment artifacts: {run_dir}")
+    logger = get_logger()
+    logger.info("Experiment artifacts: %s", run_dir)
 
     try:
         train = load_data(config.data.train_path)
@@ -79,7 +80,6 @@ def main():
 
             score["model"] = model_name
             results.append(score)
-            tracker.log(f"Evaluated model: {model_name}")
 
         results = (
             pd.DataFrame(results)
@@ -88,7 +88,7 @@ def main():
             .reset_index()
         )
 
-        print(results)
+        logger.info("Results:\n%s", results)
         tracker.log_results(results)
         tracker.finish()
     except Exception as error:

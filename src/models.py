@@ -10,6 +10,10 @@ from sklearn.preprocessing import FunctionTransformer
 from sklearn.pipeline import Pipeline
 
 from src.preprocessing import fill_categorical_missing
+from src.experiment_tracking import get_logger
+
+
+logger = get_logger()
 
 
 @dataclass
@@ -23,7 +27,7 @@ class ModelSpec:
 def create_pipeline(model, preprocessor=None) -> Pipeline:
     """Create a pipeline combining preprocessing and a model."""
 
-    print(f'Creating pipeline for {model.__class__.__name__}..')
+    logger.info("Creating pipeline for %s", model.__class__.__name__)
 
     if preprocessor is None:
         return Pipeline([

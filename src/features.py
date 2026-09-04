@@ -1,5 +1,9 @@
 import pandas as pd
 
+from src.experiment_tracking import get_logger
+
+logger = get_logger()
+
 
 def prepare_features(
     data: pd.DataFrame,
@@ -8,7 +12,7 @@ def prepare_features(
 ) -> tuple[pd.DataFrame, pd.Series]:
     """Separate target from input features and select relevant columns."""
 
-    print('Preparing features..')
+    logger.info("Preparing features")
 
     required_columns = [target_column, *feature_columns]
     missing_columns = sorted(set(required_columns) - set(data.columns))

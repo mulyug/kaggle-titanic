@@ -2,6 +2,10 @@ from pathlib import Path
 
 import pandas as pd
 
+from src.experiment_tracking import get_logger
+
+logger = get_logger()
+
 
 def load_data(path: str | Path) -> pd.DataFrame:
     """Load a dataset from a CSV file."""
@@ -10,10 +14,10 @@ def load_data(path: str | Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Dataset not found: {path}")
 
-    print(f'Loading dataset: {path}..')
+    logger.info("Loading dataset: %s", path)
 
     df = pd.read_csv(path)
 
-    print(f"Initial shape: {df.shape}")
+    logger.info("Initial shape: %s", df.shape)
 
     return df
