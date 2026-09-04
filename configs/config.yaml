@@ -32,6 +32,10 @@ evaluation:
     - recall
     - roc_auc
 
+explainability:
+  enabled: true
+  sample_size: 800
+
 models:
   logistic_regression:
     enabled: true

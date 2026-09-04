@@ -3,12 +3,13 @@ import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 
 from src.utils import set_seed
+from src.experiment_tracking import ExperimentTracker, get_logger
 from src.data import load_data
 from src.features import prepare_features
-from src.experiment_tracking import ExperimentTracker, get_logger
 from src.preprocessing import create_standard_preprocessor, create_tree_preprocessor
 from src.models import create_models
 from src.validation import evaluate
+from src.explainability import shap_explain_model
 
 
 def main():
@@ -84,12 +85,29 @@ def main():
         results = (
             pd.DataFrame(results)
             .set_index("model")
-            .sort_values(by=f"mean_{config.evaluation.primary_metric}", ascending=False)
+            .sort_values(
+                by=[f"mean_{config.evaluation.primary_metric}", f"std_{config.evaluation.primary_metric}"],
+                ascending=[False, True],
+            )
             .reset_index()
         )
 
         logger.info("Results:\n%s", results)
         tracker.log_results(results)
+
+        if config.explainability.enabled:
+            best_model_name = results.iloc[0]["model"]
+            best_model = models[best_model_name]
+            logger.info("Selected best model for SHAP: %s", best_model_name)
+            best_model.pipeline.fit(X, y, **best_model.fit_params)
+            shap_explain_model(
+                model_pipeline=best_model.pipeline,
+                X=X,
+                output_dir=run_dir / "shap" / best_model_name,
+                sample_size=config.explainability.sample_size,
+            )
+            tracker.log(f"Saved SHAP artifacts for model: {best_model_name}")
+
         tracker.finish()
     except Exception as error:
         tracker.fail(error)
