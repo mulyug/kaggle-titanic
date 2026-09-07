@@ -1,8 +1,6 @@
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import pandas as pd
-import shap
 
 
 def shap_explain_model(
@@ -12,6 +10,9 @@ def shap_explain_model(
     sample_size: int,
 ) -> None:
     """Calculate SHAP values and save feature importance artifacts."""
+
+    import matplotlib.pyplot as plt
+    import shap
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
