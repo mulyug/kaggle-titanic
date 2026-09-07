@@ -31,6 +31,10 @@ evaluation:
     - precision
     - recall
     - roc_auc
+  plots:
+    enabled: true
+    roc_curve: true
+    pr_curve: true
 
 explainability:
   enabled: true
@@ -53,6 +57,7 @@ models:
     params:
       C: 1.0
       kernel: rbf
+      probability: true
 
   random_forest:
     enabled: true

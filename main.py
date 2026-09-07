@@ -8,8 +8,9 @@ from src.data import load_data
 from src.features import prepare_features
 from src.preprocessing import create_standard_preprocessor, create_tree_preprocessor
 from src.models import create_models
-from src.validation import evaluate
+from src.validation import evaluate, get_oof_scores
 from src.explainability import shap_explain_model
+from src.plots import save_evaluation_plots
 
 
 def run_experiment(config, tracker, run_dir, logger):
@@ -83,9 +84,28 @@ def run_experiment(config, tracker, run_dir, logger):
     logger.info("Results:\n%s", results)
     tracker.log_results(results)
 
+    best_model_name = results.iloc[0]["model"]
+    best_model = models[best_model_name]
+
+    if config.evaluation.plots.enabled:
+        oof_scores = get_oof_scores(
+            model_pipeline=best_model.pipeline,
+            X=X,
+            y=y,
+            cv=cv,
+            fit_params=best_model.fit_params,
+        )
+        save_evaluation_plots(
+            y_true=y,
+            y_score=oof_scores,
+            output_dir=run_dir / "plots" / best_model_name,
+            model_name=best_model_name,
+            save_roc_curve=config.evaluation.plots.roc_curve,
+            save_pr_curve=config.evaluation.plots.pr_curve,
+        )
+        tracker.log(f"Saved evaluation plots for model: {best_model_name}")
+
     if config.explainability.enabled:
-        best_model_name = results.iloc[0]["model"]
-        best_model = models[best_model_name]
         logger.info("Selected best model for SHAP: %s", best_model_name)
         best_model.pipeline.fit(X, y, **best_model.fit_params)
         shap_explain_model(
