@@ -1,5 +1,5 @@
 general:
-  experiment_name: baseline
+  experiment_name: baseline_with_nn
   seed: 0
 
 data:
@@ -79,6 +79,16 @@ models:
       loss_function: Logloss
       verbose: false
       random_seed: ${general.seed}
+
+  neural_network:
+    enabled: true
+    params:
+      learning_rate: 0.01
+      epochs: 50
+      batch_size: 64
+      log_every_n_epochs: 20
+      random_state: ${general.seed}
+      device: mps
 
 output:
   experiments_dir: outputs/experiments
