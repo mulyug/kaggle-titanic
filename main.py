@@ -33,19 +33,27 @@ def run_experiment(config, tracker, run_dir, logger):
         feature_columns=feature_columns,
     )
 
-    standard_preprocessor = create_standard_preprocessor(
-        numerical_features=numerical_features,
-        categorical_features=categorical_features,
-    )
-    tree_preprocessor = create_tree_preprocessor(
-        numerical_features=numerical_features,
-        categorical_features=categorical_features,
-    )
+    preprocessors = {
+        "standard": create_standard_preprocessor(
+            numerical_features=numerical_features,
+            categorical_features=categorical_features,
+        ),
+        "random_forest": create_tree_preprocessor(
+            numerical_features=numerical_features,
+            categorical_features=categorical_features,
+            impute_numeric=True,
+            add_missing_indicator=False,
+        ),
+        "xgboost": create_tree_preprocessor(
+            numerical_features=numerical_features,
+            categorical_features=categorical_features,
+            impute_numeric=True,
+        ),
+    }
 
     models = create_models(
         config=config.models,
-        standard_preprocessor=standard_preprocessor,
-        tree_preprocessor=tree_preprocessor,
+        preprocessors=preprocessors,
         categorical_features=categorical_features,
     )
 

@@ -42,8 +42,7 @@ def create_pipeline(model, preprocessor=None) -> Pipeline:
 
 def create_models(
     config,
-    standard_preprocessor,
-    tree_preprocessor,
+    preprocessors: dict,
     categorical_features: list[str],
 ) -> dict[str, ModelSpec]:
     """Create enabled model specifications from the experiment configuration."""
@@ -53,31 +52,31 @@ def create_models(
     if config.logistic_regression.enabled:
         classifier = LogisticRegression(**config.logistic_regression.params)
         models["logistic_regression"] = ModelSpec(
-            pipeline=create_pipeline(classifier, standard_preprocessor),
+            pipeline=create_pipeline(classifier, preprocessors["standard"]),
         )
 
     if config.knn.enabled:
         classifier = KNeighborsClassifier(**config.knn.params)
         models["knn"] = ModelSpec(
-            pipeline=create_pipeline(classifier, standard_preprocessor),
+            pipeline=create_pipeline(classifier, preprocessors["standard"]),
         )
 
     if config.svm.enabled:
         classifier = SVC(**config.svm.params)
         models["svm"] = ModelSpec(
-            pipeline=create_pipeline(classifier, standard_preprocessor),
+            pipeline=create_pipeline(classifier, preprocessors["standard"]),
         )
 
     if config.random_forest.enabled:
         classifier = RandomForestClassifier(**config.random_forest.params)
         models["random_forest"] = ModelSpec(
-            pipeline=create_pipeline(classifier, tree_preprocessor),
+            pipeline=create_pipeline(classifier, preprocessors["random_forest"]),
         )
 
     if config.xgboost.enabled:
         classifier = XGBClassifier(**config.xgboost.params)
         models["xgboost"] = ModelSpec(
-            pipeline=create_pipeline(classifier, tree_preprocessor),
+            pipeline=create_pipeline(classifier, preprocessors["xgboost"]),
         )
 
     if config.catboost.enabled:
