@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -8,8 +9,9 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
 from sklearn.preprocessing import FunctionTransformer
+from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.utils.validation import check_is_fitted
 import torch
 from torch import nn
@@ -29,6 +31,85 @@ class ModelSpec:
     fit_params: dict = field(default_factory=dict)
 
 
+class BoostingEarlyStoppingClassifier(ClassifierMixin, BaseEstimator):
+    """Add an internal validation split to a sklearn-compatible boosting model."""
+
+    def __init__(
+        self,
+        estimator,
+        validation_fraction: float = 0.2,
+        patience: int = 30,
+        random_state: int | None = None,
+    ) -> None:
+        self.estimator = estimator
+        self.validation_fraction = validation_fraction
+        self.patience = patience
+        self.random_state = random_state
+
+    @property
+    def model_name(self) -> str:
+        return self.estimator.__class__.__name__
+
+    def fit(self, X, y, **fit_params):
+        """Fit the cloned estimator using a held-out part of the training fold."""
+
+        X_train, X_validation, y_train, y_validation = train_test_split(
+            X,
+            y,
+            test_size=self.validation_fraction,
+            stratify=y,
+            random_state=self.random_state,
+        )
+        self.estimator_ = clone(self.estimator)
+        estimator_name = self.estimator_.__class__.__name__
+        logger.info("Training %s with early stopping (patience=%s)", estimator_name, self.patience)
+
+        if isinstance(self.estimator_, XGBClassifier):
+            self.estimator_.set_params(early_stopping_rounds=self.patience)
+            self.estimator_.fit(
+                X_train,
+                y_train,
+                eval_set=[(X_validation, y_validation)],
+                verbose=False,
+                **fit_params,
+            )
+        elif isinstance(self.estimator_, CatBoostClassifier):
+            self.estimator_.fit(
+                X_train,
+                y_train,
+                eval_set=(X_validation, y_validation),
+                early_stopping_rounds=self.patience,
+                use_best_model=True,
+                **fit_params,
+            )
+        else:
+            raise TypeError(
+                "BoostingEarlyStoppingClassifier supports only "
+                "XGBClassifier and CatBoostClassifier"
+            )
+
+        self.classes_ = self.estimator_.classes_
+        if hasattr(self.estimator_, "n_features_in_"):
+            self.n_features_in_ = self.estimator_.n_features_in_
+
+        if isinstance(self.estimator_, CatBoostClassifier):
+            best_iteration = self.estimator_.get_best_iteration()
+        else:
+            best_iteration = getattr(self.estimator_, "best_iteration", None)
+        if best_iteration is not None:
+            logger.info("%s best iteration: %s", estimator_name, best_iteration)
+
+        return self
+
+    def predict(self, X):
+        check_is_fitted(self, "estimator_")
+        return self.estimator_.predict(X)
+
+    def predict_proba(self, X):
+        check_is_fitted(self, "estimator_")
+        return self.estimator_.predict_proba(X)
+
+
 class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
     """A PyTorch MLP exposed through sklearn's classifier interface."""
 
@@ -40,6 +121,11 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
         log_every_n_epochs: int = 10,
         random_state: int | None = None,
         device: str = "cpu",
+        num_threads: int = 1,
+        early_stopping: bool = True,
+        validation_fraction: float = 0.2,
+        patience: int = 10,
+        min_delta: float = 0.0001,
     ) -> None:
         self.learning_rate = learning_rate
         self.epochs = epochs
@@ -47,6 +133,11 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
         self.log_every_n_epochs = log_every_n_epochs
         self.random_state = random_state
         self.device = device
+        self.num_threads = num_threads
+        self.early_stopping = early_stopping
+        self.validation_fraction = validation_fraction
+        self.patience = patience
+        self.min_delta = min_delta
 
     def fit(self, X, y):
         """Train a fresh nn.Sequential model and return the fitted estimator."""
@@ -60,12 +151,29 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
 
         self.n_features_in_ = X_array.shape[1]
         self.device_ = torch.device(self.device)
+        torch.set_num_threads(self.num_threads)
         self._set_seed()
         self.model_ = self._build_network().to(self.device_)
 
-        X_tensor = torch.as_tensor(X_array, dtype=torch.float32)
         y_binary = (y_array == self.classes_[1]).astype(np.float32)
-        y_tensor = torch.as_tensor(y_binary, dtype=torch.float32)
+
+        if self.early_stopping:
+            X_train, X_validation, y_train, y_validation = train_test_split(
+                X_array,
+                y_binary,
+                test_size=self.validation_fraction,
+                stratify=y_binary,
+                random_state=self.random_state,
+            )
+        else:
+            X_train, y_train = X_array, y_binary
+            X_validation = y_validation = None
+
+        X_train_tensor = torch.as_tensor(X_train, dtype=torch.float32)
+        y_train_tensor = torch.as_tensor(y_train, dtype=torch.float32)
+        if self.early_stopping:
+            X_validation_tensor = torch.as_tensor(X_validation, dtype=torch.float32, device=self.device_)
+            y_validation_tensor = torch.as_tensor(y_validation, dtype=torch.float32, device=self.device_)
 
         optimizer = torch.optim.Adam(
             self.model_.parameters(),
@@ -77,15 +185,22 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
             generator.manual_seed(self.random_state)
 
         logger.info("Training neural network for %s epochs", self.epochs)
-        self.model_.train()
+        best_validation_loss = np.inf
+        best_model_state = None
+        epochs_without_improvement = 0
+
         for epoch in range(1, self.epochs + 1):
-            indices = torch.randperm(len(X_tensor), generator=generator)
+            self.model_.train()
+            indices = torch.randperm(len(X_train_tensor), generator=generator)
+            batches = list(torch.split(indices, self.batch_size))
+            if len(batches) > 1 and len(batches[-1]) == 1:
+                batches[-2] = torch.cat([batches[-2], batches[-1]])
+                batches.pop()
+
             epoch_loss = 0.0
-            batch_count = 0
-            for start in range(0, len(X_tensor), self.batch_size):
-                batch_indices = indices[start:start + self.batch_size]
-                batch_X = X_tensor[batch_indices].to(self.device_)
-                batch_y = y_tensor[batch_indices].to(self.device_)
+            for batch_indices in batches:
+                batch_X = X_train_tensor[batch_indices].to(self.device_)
+                batch_y = y_train_tensor[batch_indices].to(self.device_)
 
                 optimizer.zero_grad()
                 logits = self.model_(batch_X).squeeze(1)
@@ -93,15 +208,41 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
                 loss.backward()
                 optimizer.step()
                 epoch_loss += loss.item()
-                batch_count += 1
+
+            train_loss = epoch_loss / len(batches)
+            validation_loss = None
+            if self.early_stopping:
+                self.model_.eval()
+                with torch.no_grad():
+                    validation_logits = self.model_(X_validation_tensor).squeeze(1)
+                    validation_loss = criterion(
+                        validation_logits,
+                        y_validation_tensor,
+                    ).item()
+
+                if validation_loss < best_validation_loss - self.min_delta:
+                    best_validation_loss = validation_loss
+                    best_model_state = deepcopy(self.model_.state_dict())
+                    self.best_epoch_ = epoch
+                    epochs_without_improvement = 0
+                else:
+                    epochs_without_improvement += 1
 
             if epoch % self.log_every_n_epochs == 0 or epoch == self.epochs:
-                logger.info(
-                    "Neural network epoch %s/%s | loss: %.4f",
-                    epoch,
-                    self.epochs,
-                    epoch_loss / batch_count,
-                )
+                if validation_loss is None:
+                    logger.info("Neural network epoch %s/%s | train loss: %.4f", epoch, self.epochs, train_loss)
+                else:
+                    logger.info("Neural network epoch %s/%s | train loss: %.4f | val loss: %.4f",
+                                epoch, self.epochs, train_loss, validation_loss)
+
+            if self.early_stopping and epochs_without_improvement >= self.patience:
+                logger.info("Neural network early stopping at epoch %s; best epoch: %s", epoch, self.best_epoch_)
+                break
+
+        self.epochs_trained_ = epoch
+        if best_model_state is not None:
+            self.model_.load_state_dict(best_model_state)
+            self.best_validation_loss_ = best_validation_loss
 
         return self
 
@@ -159,7 +300,7 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
 def create_pipeline(model, preprocessor=None) -> Pipeline:
     """Create a pipeline combining preprocessing and a model."""
 
-    logger.info("Creating pipeline for %s", model.__class__.__name__)
+    logger.info("Creating pipeline for %s", getattr(model, "model_name", model.__class__.__name__))
 
     if preprocessor is None:
         return Pipeline([
@@ -207,12 +348,26 @@ def create_models(
 
     if config.xgboost.enabled:
         classifier = XGBClassifier(**config.xgboost.params)
+        if config.xgboost.early_stopping.enabled:
+            classifier = BoostingEarlyStoppingClassifier(
+                estimator=classifier,
+                validation_fraction=config.xgboost.early_stopping.validation_fraction,
+                patience=config.xgboost.early_stopping.patience,
+                random_state=config.xgboost.early_stopping.random_state,
+            )
         models["xgboost"] = ModelSpec(
             pipeline=create_pipeline(classifier, preprocessors["xgboost"]),
         )
 
     if config.catboost.enabled:
         classifier = CatBoostClassifier(**config.catboost.params)
+        if config.catboost.early_stopping.enabled:
+            classifier = BoostingEarlyStoppingClassifier(
+                estimator=classifier,
+                validation_fraction=config.catboost.early_stopping.validation_fraction,
+                patience=config.catboost.early_stopping.patience,
+                random_state=config.catboost.early_stopping.random_state,
+            )
         preprocessor = FunctionTransformer(
             fill_categorical_missing,
             kw_args={"categorical_features": categorical_features},
@@ -223,7 +378,14 @@ def create_models(
         )
 
     if config.neural_network.enabled:
-        classifier = TorchMLPClassifier(**config.neural_network.params)
+        early_stopping = config.neural_network.early_stopping
+        classifier = TorchMLPClassifier(
+            **config.neural_network.params,
+            early_stopping=early_stopping.enabled,
+            validation_fraction=early_stopping.validation_fraction,
+            patience=early_stopping.patience,
+            min_delta=early_stopping.min_delta,
+        )
         models["neural_network"] = ModelSpec(
             pipeline=create_pipeline(classifier, preprocessors["standard"]),
         )

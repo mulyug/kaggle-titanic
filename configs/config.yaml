@@ -69,6 +69,13 @@ models:
     params:
       random_state: ${general.seed}
       n_jobs: 1
+      n_estimators: 500
+      learning_rate: 0.03
+    early_stopping:
+      enabled: true
+      validation_fraction: 0.2
+      patience: 50
+      random_state: ${general.seed}
 
   catboost:
     enabled: true
@@ -79,6 +86,11 @@ models:
       loss_function: Logloss
       verbose: false
       random_seed: ${general.seed}
+    early_stopping:
+      enabled: true
+      validation_fraction: 0.2
+      patience: 50
+      random_state: ${general.seed}
 
   neural_network:
     enabled: true
@@ -89,6 +101,12 @@ models:
       log_every_n_epochs: 20
       random_state: ${general.seed}
       device: mps
+      num_threads: 1
+    early_stopping:
+      enabled: true
+      validation_fraction: 0.2
+      patience: 10
+      min_delta: 0.0001
 
 output:
   experiments_dir: outputs/experiments
