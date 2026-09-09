@@ -19,7 +19,8 @@ def evaluate(
 ) -> dict:
     """Evaluate a model pipeline with multiple cross-validation metrics."""
 
-    model_name = model_pipeline.named_steps["classifier"].__class__.__name__
+    classifier = model_pipeline.named_steps["classifier"]
+    model_name = getattr(classifier, "model_name", classifier.__class__.__name__)
     logger.info("Evaluating model %s using CV", model_name)
     start_time = time.time()
 
@@ -64,7 +65,7 @@ def get_oof_scores(
 
     classifier = model_pipeline.named_steps["classifier"]
     method = "predict_proba" if hasattr(classifier, "predict_proba") else "decision_function"  # for SVM
-    model_name = classifier.__class__.__name__
+    model_name = getattr(classifier, "model_name", classifier.__class__.__name__)
 
     logger.info("Generating out-of-fold scores for %s", model_name)
     predictions = cross_val_predict(
