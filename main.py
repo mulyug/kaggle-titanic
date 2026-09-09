@@ -116,13 +116,15 @@ def run_experiment(config, tracker, run_dir, logger):
     if config.explainability.enabled:
         logger.info("Selected best model for SHAP: %s", best_model_name)
         best_model.pipeline.fit(X, y, **best_model.fit_params)
-        shap_explain_model(
+        shap_saved = shap_explain_model(
             model_pipeline=best_model.pipeline,
             X=X,
             output_dir=run_dir / "shap" / best_model_name,
             sample_size=config.explainability.sample_size,
+            random_state=config.general.seed,
         )
-        tracker.log(f"Saved SHAP artifacts for model: {best_model_name}")
+        if shap_saved:
+            tracker.log(f"Saved SHAP artifacts for model: {best_model_name}")
 
     tracker.finish()
 
