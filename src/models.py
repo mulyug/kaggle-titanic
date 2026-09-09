@@ -179,6 +179,13 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
             self.model_.parameters(),
             lr=self.learning_rate,
         )
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=0.5,
+            patience=3,
+            min_lr=0.00001,
+        )
         criterion = nn.BCEWithLogitsLoss()
         generator = torch.Generator()
         if self.random_state is not None:
@@ -228,6 +235,16 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
                 else:
                     epochs_without_improvement += 1
 
+            previous_learning_rate = optimizer.param_groups[0]["lr"]
+            scheduler.step(validation_loss if validation_loss is not None else train_loss)
+            current_learning_rate = optimizer.param_groups[0]["lr"]
+            if current_learning_rate < previous_learning_rate:
+                logger.info(
+                    "Neural network learning rate reduced: %.6f -> %.6f",
+                    previous_learning_rate,
+                    current_learning_rate,
+                )
+
             if epoch % self.log_every_n_epochs == 0 or epoch == self.epochs:
                 if validation_loss is None:
                     logger.info("Neural network epoch %s/%s | train loss: %.4f", epoch, self.epochs, train_loss)
@@ -240,6 +257,7 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
                 break
 
         self.epochs_trained_ = epoch
+        self.learning_rate_ = optimizer.param_groups[0]["lr"]
         if best_model_state is not None:
             self.model_.load_state_dict(best_model_state)
             self.best_validation_loss_ = best_validation_loss
