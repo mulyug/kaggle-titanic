@@ -1,11 +1,13 @@
+from pathlib import Path
+
 from omegaconf import OmegaConf
 import pandas as pd
 from sklearn.model_selection import StratifiedKFold
 
 from src.utils import set_seed
 from src.experiment_tracking import ExperimentTracker, get_logger
-from src.data import load_data
-from src.features import prepare_features
+from src.data import load_data, save_submission
+from src.features import prepare_features, prepare_inference_features
 from src.preprocessing import create_standard_preprocessor, create_tree_preprocessor
 from src.models import create_models
 from src.validation import evaluate, get_oof_scores
@@ -95,6 +97,10 @@ def run_experiment(config, tracker, run_dir, logger):
     best_model_name = results.iloc[0]["model"]
     best_model = models[best_model_name]
 
+    if config.explainability.enabled or config.submission.enabled:
+        logger.info("Fitting best model on the full training dataset: %s", best_model_name)
+        best_model.pipeline.fit(X, y, **best_model.fit_params)
+
     if config.evaluation.plots.enabled:
         oof_scores = get_oof_scores(
             model_pipeline=best_model.pipeline,
@@ -115,7 +121,6 @@ def run_experiment(config, tracker, run_dir, logger):
 
     if config.explainability.enabled:
         logger.info("Selected best model for SHAP: %s", best_model_name)
-        best_model.pipeline.fit(X, y, **best_model.fit_params)
         shap_saved = shap_explain_model(
             model_pipeline=best_model.pipeline,
             X=X,
@@ -125,6 +130,26 @@ def run_experiment(config, tracker, run_dir, logger):
         )
         if shap_saved:
             tracker.log(f"Saved SHAP artifacts for model: {best_model_name}")
+
+    if config.submission.enabled:
+        test = load_data(config.data.test_path)
+        tracker.log_dataset("test", config.data.test_path, test.shape)
+        X_test = prepare_inference_features(test, feature_columns)
+        predictions = best_model.pipeline.predict(X_test)
+        submission_path = (
+            Path(config.output.submission_dir)
+            / config.general.experiment_name
+            / run_dir.name
+            / "submission.csv"
+        )
+        save_submission(
+            test_data=test,
+            predictions=predictions,
+            id_column=config.submission.id_column,
+            target_column=config.target.column,
+            output_path=submission_path,
+        )
+        tracker.log(f"Saved Kaggle submission: {submission_path}")
 
     tracker.finish()
 

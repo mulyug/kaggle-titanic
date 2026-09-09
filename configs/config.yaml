@@ -40,6 +40,10 @@ explainability:
   enabled: true
   sample_size: 800
 
+submission:
+  enabled: true
+  id_column: PassengerId
+
 models:
   logistic_regression:
     enabled: true

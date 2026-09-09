@@ -26,3 +26,18 @@ def prepare_features(
     y = data[target_column].copy()
 
     return X, y
+
+
+def prepare_inference_features(
+    data: pd.DataFrame,
+    feature_columns: list[str],
+) -> pd.DataFrame:
+    """Select the training feature columns from data without a target."""
+
+    missing_columns = sorted(set(feature_columns) - set(data.columns))
+    if missing_columns:
+        raise ValueError(
+            f"Dataset is missing required columns: {', '.join(missing_columns)}",
+        )
+
+    return data[feature_columns].copy()
