@@ -23,24 +23,31 @@ def configure_logging(run_dir: Path) -> logging.Logger:
     """Configure console and per-run file logging."""
 
     logger = get_logger()
+    warning_logger = logging.getLogger("py.warnings")
+    logging.captureWarnings(True)
+
     logger.setLevel(logging.INFO)
     logger.propagate = False
-
-    for handler in logger.handlers[:]:
-        handler.close()
-        logger.removeHandler(handler)
+    warning_logger.setLevel(logging.WARNING)
+    warning_logger.propagate = False
 
     formatter = logging.Formatter(
         "%(asctime)s | %(levelname)s | %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
+    for configured_logger in (logger, warning_logger):
+        for handler in configured_logger.handlers[:]:
+            handler.close()
+            configured_logger.removeHandler(handler)
 
-    file_handler = logging.FileHandler(run_dir / "run.log", encoding="utf-8")
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(formatter)
+        configured_logger.addHandler(console_handler)
+
+        file_handler = logging.FileHandler(run_dir / "run.log", encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        configured_logger.addHandler(file_handler)
+
     return logger
 
 
