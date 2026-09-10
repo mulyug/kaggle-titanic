@@ -58,7 +58,7 @@ class ExperimentTracker:
         self.experiments_dir = Path(experiments_dir)
         self.experiment_name = experiment_name
         self.project_root = Path(__file__).resolve().parent.parent
-        self.run_id = datetime.now().astimezone().strftime("%Y-%m-%d_%H:%M")
+        self.run_id = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
         self.run_dir = self.experiments_dir / experiment_name / self.run_id
         self.metadata: dict = {}
         self.logger = get_logger()
