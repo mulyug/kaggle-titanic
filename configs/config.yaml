@@ -39,6 +39,9 @@ evaluation:
 explainability:
   enabled: true
   sample_size: 800
+  generic:
+    max_evals: 500
+    max_samples: 200
 
 submission:
   enabled: true

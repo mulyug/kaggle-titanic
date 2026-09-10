@@ -127,6 +127,8 @@ def run_experiment(config, tracker, run_dir, logger):
             output_dir=run_dir / "shap" / best_model_name,
             sample_size=config.explainability.sample_size,
             random_state=config.general.seed,
+            generic_max_evals=config.explainability.generic.max_evals,
+            generic_max_samples=config.explainability.generic.max_samples,
         )
         if shap_saved:
             tracker.log(f"Saved SHAP artifacts for model: {best_model_name}")

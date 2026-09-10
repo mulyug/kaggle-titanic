@@ -15,6 +15,8 @@ def shap_explain_model(
     output_dir: str | Path,
     sample_size: int,
     random_state: int,
+    generic_max_evals: int,
+    generic_max_samples: int,
 ) -> bool:
     """Calculate SHAP values when supported and save interpretation artifacts."""
 
@@ -56,8 +58,12 @@ def shap_explain_model(
                 pred_contribs=True,
             )[:, :-1]
         else:
+            transformed_sample = transformed_sample[:generic_max_samples]
             if hasattr(transformed_sample, "toarray"):
                 transformed_sample = transformed_sample.toarray()
+
+            minimum_evals = 2 * transformed_sample.shape[1] + 1
+            effective_max_evals = max(generic_max_evals, minimum_evals)
 
             if hasattr(classifier, "predict_proba"):
                 prediction_function = classifier.predict_proba
@@ -66,8 +72,8 @@ def shap_explain_model(
             else:
                 prediction_function = classifier.predict
 
-            explainer = shap.Explainer(prediction_function, transformed_sample)
-            shap_values = explainer(transformed_sample).values
+            explainer = shap.Explainer(prediction_function, transformed_sample, algorithm="permutation")
+            shap_values = explainer(transformed_sample, max_evals=effective_max_evals).values
             if shap_values.ndim == 3:
                 shap_values = shap_values[:, :, 1]
     except Exception as error:
