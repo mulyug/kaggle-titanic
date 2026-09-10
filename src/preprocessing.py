@@ -5,7 +5,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
-def create_numeric_preprocessor(scale: bool = True) -> Pipeline:
+def create_numeric_preprocessor() -> Pipeline:
     """Create preprocessing for numerical features."""
 
     return Pipeline([
