@@ -1,4 +1,3 @@
-from copy import deepcopy
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -51,7 +50,7 @@ class BoostingEarlyStoppingClassifier(ClassifierMixin, BaseEstimator):
         return self.estimator.__class__.__name__
 
     def fit(self, X, y, **fit_params):
-        """Fit the cloned estimator using a held-out part of the training fold."""
+        """Select boosting rounds, then refit a fresh model on all input rows."""
 
         X_train, X_validation, y_train, y_validation = train_test_split(
             X,
@@ -60,21 +59,24 @@ class BoostingEarlyStoppingClassifier(ClassifierMixin, BaseEstimator):
             stratify=y,
             random_state=self.random_state,
         )
-        self.estimator_ = clone(self.estimator)
-        estimator_name = self.estimator_.__class__.__name__
+        selection_estimator = clone(self.estimator)
+        estimator_name = selection_estimator.__class__.__name__
         logger.info("Training %s with early stopping (patience=%s)", estimator_name, self.patience)
 
-        if isinstance(self.estimator_, XGBClassifier):
-            self.estimator_.set_params(early_stopping_rounds=self.patience)
-            self.estimator_.fit(
+        if isinstance(selection_estimator, XGBClassifier):
+            selection_estimator.set_params(early_stopping_rounds=self.patience)
+            selection_estimator.fit(
                 X_train,
                 y_train,
                 eval_set=[(X_validation, y_validation)],
                 verbose=False,
                 **fit_params,
             )
-        elif isinstance(self.estimator_, CatBoostClassifier):
-            self.estimator_.fit(
+            best_iteration = selection_estimator.best_iteration
+            fallback_rounds = self.estimator.get_params()["n_estimators"]
+            rounds = best_iteration + 1 if best_iteration is not None else fallback_rounds
+        elif isinstance(selection_estimator, CatBoostClassifier):
+            selection_estimator.fit(
                 X_train,
                 y_train,
                 eval_set=(X_validation, y_validation),
@@ -82,22 +84,30 @@ class BoostingEarlyStoppingClassifier(ClassifierMixin, BaseEstimator):
                 use_best_model=True,
                 **fit_params,
             )
+            best_iteration = selection_estimator.get_best_iteration()
+            fallback_rounds = self.estimator.get_params()["iterations"]
+            rounds = best_iteration + 1 if best_iteration >= 0 else fallback_rounds
         else:
             raise TypeError(
                 "BoostingEarlyStoppingClassifier supports only "
                 "XGBClassifier and CatBoostClassifier"
             )
 
+        self.best_iteration_ = best_iteration
+        self.n_estimators_ = rounds
+        logger.info("%s best iteration: %s", estimator_name, best_iteration)
+        logger.info("Refitting %s on all %s rows for %s iterations", estimator_name, len(y), rounds)
+
+        self.estimator_ = clone(self.estimator)
+        if isinstance(self.estimator_, XGBClassifier):
+            self.estimator_.set_params(n_estimators=rounds)
+        else:
+            self.estimator_.set_params(iterations=rounds)
+        self.estimator_.fit(X, y, **fit_params)
+
         self.classes_ = self.estimator_.classes_
         if hasattr(self.estimator_, "n_features_in_"):
             self.n_features_in_ = self.estimator_.n_features_in_
-
-        if isinstance(self.estimator_, CatBoostClassifier):
-            best_iteration = self.estimator_.get_best_iteration()
-        else:
-            best_iteration = getattr(self.estimator_, "best_iteration", None)
-        if best_iteration is not None:
-            logger.info("%s best iteration: %s", estimator_name, best_iteration)
 
         return self
 
@@ -140,7 +150,7 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
         self.min_delta = min_delta
 
     def fit(self, X, y):
-        """Train a fresh nn.Sequential model and return the fitted estimator."""
+        """Select the best epoch, then refit a fresh network on all rows."""
 
         X_array = self._to_dense_float_array(X)
         y_array = np.asarray(y)
@@ -152,9 +162,6 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
         self.n_features_in_ = X_array.shape[1]
         self.device_ = torch.device(self.device)
         torch.set_num_threads(self.num_threads)
-        self._set_seed()
-        self.model_ = self._build_network().to(self.device_)
-
         y_binary = (y_array == self.classes_[1]).astype(np.float32)
 
         if self.early_stopping:
@@ -165,20 +172,65 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
                 stratify=y_binary,
                 random_state=self.random_state,
             )
+            (_, self.best_epoch_, self.best_validation_loss_, _) = self._train_network(
+                X_train,
+                y_train,
+                epochs=self.epochs,
+                X_validation=X_validation,
+                y_validation=y_validation,
+                use_early_stopping=True,
+            )
+            logger.info(
+                "Refitting neural network on all %s rows for %s epochs",
+                len(X_array),
+                self.best_epoch_,
+            )
+            (self.epochs_trained_, _, _, self.learning_rate_) = self._train_network(
+                X_array,
+                y_binary,
+                epochs=self.best_epoch_,
+                use_early_stopping=False,
+            )
         else:
-            X_train, y_train = X_array, y_binary
-            X_validation = y_validation = None
+            (self.epochs_trained_, _, _, self.learning_rate_) = self._train_network(
+                X_array,
+                y_binary,
+                epochs=self.epochs,
+                use_early_stopping=False,
+            )
 
+        return self
+
+    def _train_network(
+        self,
+        X_train,
+        y_train,
+        epochs: int,
+        X_validation=None,
+        y_validation=None,
+        use_early_stopping: bool = False,
+    ) -> tuple[int, int | None, float | None, float]:
+        """Train one fresh network and return its training metadata."""
+
+        self._set_seed()
+        self.model_ = self._build_network().to(self.device_)
         X_train_tensor = torch.as_tensor(X_train, dtype=torch.float32)
         y_train_tensor = torch.as_tensor(y_train, dtype=torch.float32)
-        if self.early_stopping:
-            X_validation_tensor = torch.as_tensor(X_validation, dtype=torch.float32, device=self.device_)
-            y_validation_tensor = torch.as_tensor(y_validation, dtype=torch.float32, device=self.device_)
+        has_validation = X_validation is not None
 
-        optimizer = torch.optim.Adam(
-            self.model_.parameters(),
-            lr=self.learning_rate,
-        )
+        if has_validation:
+            X_validation_tensor = torch.as_tensor(
+                X_validation,
+                dtype=torch.float32,
+                device=self.device_,
+            )
+            y_validation_tensor = torch.as_tensor(
+                y_validation,
+                dtype=torch.float32,
+                device=self.device_,
+            )
+
+        optimizer = torch.optim.Adam(self.model_.parameters(), lr=self.learning_rate)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
             mode="min",
@@ -191,12 +243,12 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
         if self.random_state is not None:
             generator.manual_seed(self.random_state)
 
-        logger.info("Training neural network for %s epochs", self.epochs)
+        logger.info("Training neural network for up to %s epochs", epochs)
         best_validation_loss = np.inf
-        best_model_state = None
+        best_epoch = None
         epochs_without_improvement = 0
 
-        for epoch in range(1, self.epochs + 1):
+        for epoch in range(1, epochs + 1):
             self.model_.train()
             indices = torch.randperm(len(X_train_tensor), generator=generator)
             batches = list(torch.split(indices, self.batch_size))
@@ -218,7 +270,7 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
 
             train_loss = epoch_loss / len(batches)
             validation_loss = None
-            if self.early_stopping:
+            if has_validation:
                 self.model_.eval()
                 with torch.no_grad():
                     validation_logits = self.model_(X_validation_tensor).squeeze(1)
@@ -229,14 +281,13 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
 
                 if validation_loss < best_validation_loss - self.min_delta:
                     best_validation_loss = validation_loss
-                    best_model_state = deepcopy(self.model_.state_dict())
-                    self.best_epoch_ = epoch
+                    best_epoch = epoch
                     epochs_without_improvement = 0
                 else:
                     epochs_without_improvement += 1
 
             previous_learning_rate = optimizer.param_groups[0]["lr"]
-            scheduler.step(validation_loss if validation_loss is not None else train_loss)
+            scheduler.step(validation_loss if has_validation else train_loss)
             current_learning_rate = optimizer.param_groups[0]["lr"]
             if current_learning_rate < previous_learning_rate:
                 logger.info(
@@ -245,24 +296,19 @@ class TorchMLPClassifier(ClassifierMixin, BaseEstimator):
                     current_learning_rate,
                 )
 
-            if epoch % self.log_every_n_epochs == 0 or epoch == self.epochs:
-                if validation_loss is None:
-                    logger.info("Neural network epoch %s/%s | train loss: %.4f", epoch, self.epochs, train_loss)
+            if epoch % self.log_every_n_epochs == 0 or epoch == epochs:
+                if has_validation:
+                    logger.info("Neural network epoch %s/%s | train loss: %.4f | val loss: %.4f", epoch, epochs,
+                                train_loss, validation_loss)
                 else:
-                    logger.info("Neural network epoch %s/%s | train loss: %.4f | val loss: %.4f",
-                                epoch, self.epochs, train_loss, validation_loss)
+                    logger.info("Neural network epoch %s/%s | train loss: %.4f", epoch, epochs, train_loss)
 
-            if self.early_stopping and epochs_without_improvement >= self.patience:
-                logger.info("Neural network early stopping at epoch %s; best epoch: %s", epoch, self.best_epoch_)
+            if use_early_stopping and epochs_without_improvement >= self.patience:
+                logger.info("Neural network early stopping at epoch %s; best epoch: %s", epoch, best_epoch)
                 break
 
-        self.epochs_trained_ = epoch
-        self.learning_rate_ = optimizer.param_groups[0]["lr"]
-        if best_model_state is not None:
-            self.model_.load_state_dict(best_model_state)
-            self.best_validation_loss_ = best_validation_loss
-
-        return self
+        learning_rate = optimizer.param_groups[0]["lr"]
+        return epoch, best_epoch, best_validation_loss if has_validation else None, learning_rate
 
     def predict_proba(self, X) -> np.ndarray:
         """Return probabilities for the negative and positive classes."""

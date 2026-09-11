@@ -5,18 +5,40 @@ import platform
 import re
 import subprocess
 import sys
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 from omegaconf import OmegaConf
 LOGGER_NAME = "kaggle_titanic"
+_LOG_CONTEXT: ContextVar[str] = ContextVar("log_context", default="")
+
+
+class _LogContextFilter(logging.Filter):
+    """Add the active execution context to every project log record."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.context = _LOG_CONTEXT.get()
+        return True
 
 
 def get_logger() -> logging.Logger:
     """Return the project's shared logger."""
 
     return logging.getLogger(LOGGER_NAME)
+
+
+@contextmanager
+def log_context(context: str):
+    """Temporarily label related log messages, for example a CV fold."""
+
+    token = _LOG_CONTEXT.set(f"[{context}] ")
+    try:
+        yield
+    finally:
+        _LOG_CONTEXT.reset(token)
 
 
 def configure_logging(run_dir: Path) -> logging.Logger:
@@ -32,7 +54,7 @@ def configure_logging(run_dir: Path) -> logging.Logger:
     warning_logger.propagate = False
 
     formatter = logging.Formatter(
-        "%(asctime)s | %(levelname)s | %(message)s",
+        "%(asctime)s | %(levelname)s | %(context)s%(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
     for configured_logger in (logger, warning_logger):
@@ -42,10 +64,12 @@ def configure_logging(run_dir: Path) -> logging.Logger:
 
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(formatter)
+        console_handler.addFilter(_LogContextFilter())
         configured_logger.addHandler(console_handler)
 
         file_handler = logging.FileHandler(run_dir / "run.log", encoding="utf-8")
         file_handler.setFormatter(formatter)
+        file_handler.addFilter(_LogContextFilter())
         configured_logger.addHandler(file_handler)
 
     return logger
