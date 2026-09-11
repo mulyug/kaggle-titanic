@@ -10,7 +10,7 @@ from src.data import load_data, save_submission
 from src.features import prepare_features, prepare_inference_features
 from src.preprocessing import create_standard_preprocessor, create_tree_preprocessor
 from src.models import create_models
-from src.validation import evaluate, get_oof_scores
+from src.validation import evaluate
 from src.explainability import shap_explain_model
 from src.plots import save_evaluation_plots
 
@@ -66,9 +66,10 @@ def run_experiment(config, tracker, run_dir, logger):
     )
 
     results = []
+    oof_scores_by_model = {}
 
     for model_name, model_spec in models.items():
-        score = evaluate(
+        score, oof_scores = evaluate(
             model_pipeline=model_spec.pipeline,
             X=X,
             y=y,
@@ -76,8 +77,11 @@ def run_experiment(config, tracker, run_dir, logger):
             scoring=list(config.evaluation.metrics),
             primary_metric=config.evaluation.primary_metric,
             fit_params=model_spec.fit_params,
+            collect_oof_scores=config.evaluation.plots.enabled,
         )
 
+        if oof_scores is not None:
+            oof_scores_by_model[model_name] = oof_scores
         score["model"] = model_name
         results.append(score)
 
@@ -97,27 +101,20 @@ def run_experiment(config, tracker, run_dir, logger):
     best_model_name = results.iloc[0]["model"]
     best_model = models[best_model_name]
 
-    if config.explainability.enabled or config.submission.enabled:
-        logger.info("Fitting best model on the full training dataset: %s", best_model_name)
-        best_model.pipeline.fit(X, y, **best_model.fit_params)
-
     if config.evaluation.plots.enabled:
-        oof_scores = get_oof_scores(
-            model_pipeline=best_model.pipeline,
-            X=X,
-            y=y,
-            cv=cv,
-            fit_params=best_model.fit_params,
-        )
         save_evaluation_plots(
             y_true=y,
-            y_score=oof_scores,
+            y_score=oof_scores_by_model[best_model_name],
             output_dir=run_dir / "plots" / best_model_name,
             model_name=best_model_name,
             save_roc_curve=config.evaluation.plots.roc_curve,
             save_pr_curve=config.evaluation.plots.pr_curve,
         )
         tracker.log(f"Saved evaluation plots for model: {best_model_name}")
+
+    if config.explainability.enabled or config.submission.enabled:
+        logger.info("Fitting best model on the full training dataset: %s", best_model_name)
+        best_model.pipeline.fit(X, y, **best_model.fit_params)
 
     if config.explainability.enabled:
         logger.info("Selected best model for SHAP: %s", best_model_name)
