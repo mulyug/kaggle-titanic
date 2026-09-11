@@ -1,5 +1,5 @@
 general:
-  experiment_name: baseline_with_nn
+  experiment_name: new_features
   seed: 0
 
 data:
@@ -15,10 +15,16 @@ features:
     - SibSp
     - Parch
     - Fare
+    - FamilySize
+    - IsAlone
+    - TicketGroupSize
+    - FarePerPerson
   categorical:
     - Pclass
     - Sex
     - Embarked
+    - Title
+    - Deck
 
 validation:
   n_splits: 5
@@ -37,7 +43,7 @@ evaluation:
     pr_curve: true
 
 explainability:
-  enabled: true
+  enabled: false
   sample_size: 800
   generic:
     max_evals: 500
@@ -94,7 +100,7 @@ models:
       verbose: false
       random_seed: ${general.seed}
     early_stopping:
-      enabled: true
+      enabled: false
       validation_fraction: 0.2
       patience: 50
       random_state: ${general.seed}

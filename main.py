@@ -7,7 +7,7 @@ from sklearn.model_selection import StratifiedKFold
 from src.utils import set_seed
 from src.experiment_tracking import ExperimentTracker, get_logger
 from src.data import load_data, save_submission
-from src.features import prepare_features, prepare_inference_features
+from src.features import features_engineering, prepare_features, prepare_inference_features
 from src.preprocessing import create_standard_preprocessor, create_tree_preprocessor
 from src.models import create_models
 from src.validation import evaluate
@@ -18,7 +18,10 @@ from src.plots import save_evaluation_plots
 def run_experiment(config, tracker, run_dir, logger):
 
     train = load_data(config.data.train_path)
+    test = load_data(config.data.test_path)
+    train, test = features_engineering(train, test)
     tracker.log_dataset("train", config.data.train_path, train.shape)
+    tracker.log_dataset("test", config.data.test_path, test.shape)
 
     numerical_features = list(config.features.numerical)
     categorical_features = list(config.features.categorical)
@@ -131,8 +134,6 @@ def run_experiment(config, tracker, run_dir, logger):
             tracker.log(f"Saved SHAP artifacts for model: {best_model_name}")
 
     if config.submission.enabled:
-        test = load_data(config.data.test_path)
-        tracker.log_dataset("test", config.data.test_path, test.shape)
         X_test = prepare_inference_features(test, feature_columns)
         predictions = best_model.pipeline.predict(X_test)
         submission_path = (

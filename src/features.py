@@ -5,6 +5,54 @@ from src.experiment_tracking import get_logger
 logger = get_logger()
 
 
+def features_engineering(
+    train_data: pd.DataFrame,
+    test_data: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Create the same Titanic features for train and test datasets.
+
+    Ticket group sizes are calculated from both datasets because this feature
+    uses no target information and a ticket can occur in either dataset.
+    """
+
+    required_columns = {"Name", "Cabin", "Ticket", "SibSp", "Parch", "Fare"}
+    for dataset_name, data in (("train", train_data), ("test", test_data)):
+        missing_columns = sorted(required_columns - set(data.columns))
+        if missing_columns:
+            raise ValueError(
+                f"{dataset_name} dataset is missing columns required for feature "
+                f"engineering: {', '.join(missing_columns)}",
+            )
+
+    ticket_counts = pd.concat([train_data["Ticket"], test_data["Ticket"]]).value_counts()
+    engineered_datasets = []
+
+    for data in (train_data, test_data):
+        features = data.copy()
+        features["FamilySize"] = features["SibSp"] + features["Parch"] + 1
+        features["IsAlone"] = (features["FamilySize"] == 1).astype(int)
+
+        titles = features["Name"].str.extract(r",\s*([^.]*)\.", expand=False).str.strip()
+        titles = titles.replace({"Mlle": "Miss", "Ms": "Miss", "Mme": "Mrs"}).fillna("Unknown")
+        common_titles = {"Mr", "Mrs", "Miss", "Master", "Unknown"}
+        features["Title"] = titles.where(titles.isin(common_titles), "Rare")
+
+        features["Deck"] = features["Cabin"].str[0].fillna("Unknown")
+        features["TicketGroupSize"] = features["Ticket"].map(ticket_counts).fillna(1).astype(int)
+        features["FarePerPerson"] = features["Fare"] / features["TicketGroupSize"]
+        engineered_datasets.append(features)
+
+    train_features, test_features = engineered_datasets
+    new_columns = [
+        column
+        for column in train_features.columns
+        if column not in train_data.columns
+    ]
+
+    logger.info("Created Titanic features: %s", ", ".join(new_columns))
+    return train_features, test_features
+
+
 def prepare_features(
     data: pd.DataFrame,
     target_column: str,
