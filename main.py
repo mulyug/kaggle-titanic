@@ -108,6 +108,9 @@ def run_experiment(config, tracker, run_dir, logger):
 
     best_model_name = results.iloc[0]["model"]
     best_model = models[best_model_name]
+    submission_model_names = []
+    if config.submission.enabled:
+        submission_model_names = results.head(config.submission.top_n_models)["model"].tolist()
 
     if config.evaluation.plots.enabled:
         save_evaluation_plots(
@@ -120,9 +123,19 @@ def run_experiment(config, tracker, run_dir, logger):
         )
         tracker.log(f"Saved evaluation plots for model: {best_model_name}")
 
-    if config.explainability.enabled or config.submission.enabled:
-        logger.info("Fitting best model on the full training dataset: %s", best_model_name)
-        best_model.pipeline.fit(X, y, **best_model.fit_params)
+    model_names_to_fit = submission_model_names.copy()
+    if config.explainability.enabled:
+        model_names_to_fit.append(best_model_name)
+
+    fitted_model_names = []
+    for model_name in model_names_to_fit:
+        if model_name in fitted_model_names:
+            continue
+
+        model_spec = models[model_name]
+        logger.info("Fitting model on the full training dataset: %s", model_name)
+        model_spec.pipeline.fit(X, y, **model_spec.fit_params)
+        fitted_model_names.append(model_name)
 
     if config.explainability.enabled:
         logger.info("Selected best model for SHAP: %s", best_model_name)
@@ -140,21 +153,22 @@ def run_experiment(config, tracker, run_dir, logger):
 
     if config.submission.enabled:
         X_test = prepare_inference_features(test, feature_columns)
-        predictions = best_model.pipeline.predict(X_test)
-        submission_path = (
-            Path(config.output.submission_dir)
-            / config.general.experiment_name
-            / run_dir.name
-            / "submission.csv"
-        )
-        save_submission(
-            test_data=test,
-            predictions=predictions,
-            id_column=config.submission.id_column,
-            target_column=config.target.column,
-            output_path=submission_path,
-        )
-        tracker.log(f"Saved Kaggle submission: {submission_path}")
+        for model_name in submission_model_names:
+            predictions = models[model_name].pipeline.predict(X_test)
+            submission_path = (
+                Path(config.output.submission_dir)
+                / config.general.experiment_name
+                / run_dir.name
+                / f"submission_{model_name}.csv"
+            )
+            save_submission(
+                test_data=test,
+                predictions=predictions,
+                id_column=config.submission.id_column,
+                target_column=config.target.column,
+                output_path=submission_path,
+            )
+            tracker.log(f"Saved Kaggle submission for {model_name}: {submission_path}")
 
     tracker.finish()
 

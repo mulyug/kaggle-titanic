@@ -1,5 +1,5 @@
 general:
-  experiment_name: new_features
+  experiment_name: new_features_2
   seed: 0
 
 data:
@@ -17,14 +17,19 @@ features:
     - Fare
     - FamilySize
     - IsAlone
-    - TicketGroupSize
-    - FarePerPerson
+#    - IsChild
+#    - TicketGroupSize
+#    - FarePerPerson
   categorical:
     - Pclass
     - Sex
     - Embarked
     - Title
     - Deck
+#    - SexPclass
+    - AgeBand
+#    - FamilyCategory
+    - PclassAgeBand
 
 validation:
   n_splits: 5
@@ -38,7 +43,7 @@ evaluation:
     - recall
     - roc_auc
   plots:
-    enabled: true
+    enabled: false
     roc_curve: true
     pr_curve: true
 
@@ -52,6 +57,7 @@ explainability:
 submission:
   enabled: true
   id_column: PassengerId
+  top_n_models: 2
 
 models:
   logistic_regression:
@@ -61,7 +67,7 @@ models:
       max_iter: 1000
 
   knn:
-    enabled: true
+    enabled: false
     params:
       n_neighbors: 5
 
@@ -73,7 +79,7 @@ models:
       probability: true
 
   random_forest:
-    enabled: true
+    enabled: false
     params:
       random_state: ${general.seed}
 
