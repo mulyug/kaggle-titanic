@@ -5,15 +5,8 @@ from src.experiment_tracking import get_logger
 logger = get_logger()
 
 
-def features_engineering(
-    train_data: pd.DataFrame,
-    test_data: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Create the same Titanic features for train and test datasets.
-
-    Ticket group sizes are calculated from both datasets because this feature
-    uses no target information and a ticket can occur in either dataset.
-    """
+def features_engineering(train_data: pd.DataFrame, test_data: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Create the same Titanic features for train and test datasets."""
 
     required_columns = {"Name", "Cabin", "Ticket", "SibSp", "Parch", "Fare", "Age"}
     for dataset_name, data in (("train", train_data), ("test", test_data)):
@@ -104,10 +97,7 @@ def prepare_features(
     return X, y
 
 
-def prepare_inference_features(
-    data: pd.DataFrame,
-    feature_columns: list[str],
-) -> pd.DataFrame:
+def prepare_inference_features(data: pd.DataFrame, feature_columns: list[str]) -> pd.DataFrame:
     """Select the training feature columns from data without a target."""
 
     missing_columns = sorted(set(feature_columns) - set(data.columns))
