@@ -148,6 +148,13 @@ class ExperimentTracker:
         results.to_csv(self.run_dir / "results.csv", index=False)
         self.log("Saved cross-validation results")
 
+    def log_data_sample(self, name: str, data: pd.DataFrame, n_rows: int = 10) -> None:
+        """Save the first rows of a prepared dataset as a run artifact."""
+
+        sample_path = self.run_dir / f"{name}_sample.csv"
+        data.head(n_rows).to_csv(sample_path, index=False)
+        self.log("Saved %s rows of %s to %s", min(n_rows, len(data)), name, sample_path.name)
+
     def finish(self) -> None:
         """Mark a run as completed."""
 
@@ -168,10 +175,10 @@ class ExperimentTracker:
         self._save_metadata()
         self.log(f"Run failed: {type(error).__name__}: {error}")
 
-    def log(self, message: str) -> None:
+    def log(self, message: str, *args) -> None:
         """Write a message to both the console and the current run log."""
 
-        self.logger.info(message)
+        self.logger.info(message, *args)
 
     def _save_metadata(self) -> None:
         metadata_path = self.run_dir / "metadata.json"

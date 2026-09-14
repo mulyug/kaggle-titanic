@@ -37,6 +37,11 @@ def run_experiment(config, tracker, run_dir, logger):
         target_column=config.target.column,
         feature_columns=feature_columns,
     )
+    tracker.log_data_sample(
+        name="prepared_train",
+        data=pd.concat([X, y], axis=1),
+        n_rows=10,
+    )
 
     preprocessors = {
         "standard": create_standard_preprocessor(
