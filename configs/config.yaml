@@ -44,12 +44,12 @@ evaluation:
     - recall
     - roc_auc
   plots:
-    enabled: false
+    enabled: true
     roc_curve: true
     pr_curve: true
 
 explainability:
-  enabled: false
+  enabled: true
   sample_size: 800
   generic:
     max_evals: 500
@@ -71,7 +71,7 @@ models:
       max_iter: 1000
 
   knn:
-    enabled: false
+    enabled: true
     params:
       n_neighbors: 5
 
@@ -83,7 +83,7 @@ models:
       probability: true
 
   random_forest:
-    enabled: false
+    enabled: true
     params:
       random_state: ${general.seed}
 
@@ -103,9 +103,12 @@ models:
   catboost:
     enabled: true
     params:
-      iterations: 500
+      iterations: 1000
       learning_rate: 0.03
-      depth: 6
+      depth: 5
+      l2_leaf_reg: 6
+      random_strength: 1.0
+      bagging_temperature: 0.5
       loss_function: Logloss
       verbose: false
       random_seed: ${general.seed}
