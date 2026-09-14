@@ -148,6 +148,16 @@ class ExperimentTracker:
         results.to_csv(self.run_dir / "results.csv", index=False)
         self.log("Saved cross-validation results")
 
+    def log_thresholds(self, thresholds: dict[str, dict[str, float]]) -> None:
+        """Save OOF-selected classification thresholds for submission models."""
+
+        thresholds_path = self.run_dir / "thresholds.json"
+        thresholds_path.write_text(
+            json.dumps(thresholds, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        self.log("Saved selected classification thresholds")
+
     def log_data_sample(self, name: str, data: pd.DataFrame, n_rows: int = 10) -> None:
         """Save the first rows of a prepared dataset as a run artifact."""
 

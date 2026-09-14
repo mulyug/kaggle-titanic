@@ -10,7 +10,7 @@ from src.data import load_data, save_submission
 from src.features import features_engineering, prepare_features, prepare_inference_features
 from src.preprocessing import create_standard_preprocessor, create_tree_preprocessor
 from src.models import create_models
-from src.validation import evaluate
+from src.validation import evaluate, find_best_threshold, predict_with_threshold
 from src.explainability import shap_explain_model
 from src.plots import save_evaluation_plots
 
@@ -85,7 +85,9 @@ def run_experiment(config, tracker, run_dir, logger):
             scoring=list(config.evaluation.metrics),
             primary_metric=config.evaluation.primary_metric,
             fit_params=model_spec.fit_params,
-            collect_oof_scores=config.evaluation.plots.enabled,
+            collect_oof_scores=(
+                config.evaluation.plots.enabled or config.threshold_tuning.enabled
+            ),
         )
 
         if oof_scores is not None:
@@ -111,6 +113,25 @@ def run_experiment(config, tracker, run_dir, logger):
     submission_model_names = []
     if config.submission.enabled:
         submission_model_names = results.head(config.submission.top_n_models)["model"].tolist()
+
+    thresholds_by_model = {}
+    if config.threshold_tuning.enabled:
+        for model_name in submission_model_names:
+            threshold_result = find_best_threshold(
+                y_true=y,
+                oof_scores=oof_scores_by_model[model_name],
+                metric=config.evaluation.primary_metric,
+            )
+            thresholds_by_model[model_name] = threshold_result
+            logger.info(
+                "Selected threshold for %s: %.4f | OOF %s: %.4f -> %.4f",
+                model_name,
+                threshold_result["threshold"],
+                config.evaluation.primary_metric,
+                threshold_result["oof_score_at_default_threshold"],
+                threshold_result["oof_score"],
+            )
+        tracker.log_thresholds(thresholds_by_model)
 
     if config.evaluation.plots.enabled:
         save_evaluation_plots(
@@ -154,7 +175,15 @@ def run_experiment(config, tracker, run_dir, logger):
     if config.submission.enabled:
         X_test = prepare_inference_features(test, feature_columns)
         for model_name in submission_model_names:
-            predictions = models[model_name].pipeline.predict(X_test)
+            if config.threshold_tuning.enabled:
+                threshold = thresholds_by_model[model_name]["threshold"]
+                predictions = predict_with_threshold(
+                    models[model_name].pipeline,
+                    X_test,
+                    threshold,
+                )
+            else:
+                predictions = models[model_name].pipeline.predict(X_test)
             submission_path = (
                 Path(config.output.submission_dir)
                 / config.general.experiment_name

@@ -2,12 +2,19 @@ import time
 import numpy as np
 import pandas as pd
 from sklearn.base import clone
-from sklearn.metrics import get_scorer
+from sklearn.metrics import accuracy_score, f1_score, get_scorer, precision_score, recall_score
 from sklearn.pipeline import Pipeline
 from src.experiment_tracking import get_logger, log_context
 
 
 logger = get_logger()
+
+_THRESHOLD_METRICS = {
+    "accuracy": accuracy_score,
+    "precision": lambda y_true, y_pred: precision_score(y_true, y_pred, zero_division=0),
+    "recall": recall_score,
+    "f1": f1_score,
+}
 
 
 def evaluate(
@@ -95,3 +102,62 @@ def _write_oof_scores(estimator, X: pd.DataFrame, oof_scores: np.ndarray, indice
         oof_scores[indices] = predictions[:, 1]
     else:
         oof_scores[indices] = estimator.decision_function(X)
+
+
+def find_best_threshold(
+    y_true: pd.Series,
+    oof_scores: np.ndarray,
+    metric: str,
+) -> dict[str, float]:
+    """Select the probability threshold that maximizes an OOF classification metric."""
+
+    if metric not in _THRESHOLD_METRICS:
+        supported_metrics = ", ".join(_THRESHOLD_METRICS)
+        raise ValueError(
+            f"Threshold tuning does not support '{metric}'. "
+            f"Supported metrics: {supported_metrics}",
+        )
+
+    y_true = np.asarray(y_true)
+    oof_scores = np.asarray(oof_scores, dtype=float)
+    if len(y_true) != len(oof_scores):
+        raise ValueError("y_true and oof_scores must have the same length")
+
+    metric_function = _THRESHOLD_METRICS[metric]
+    baseline_score = metric_function(y_true, oof_scores >= 0.5)
+    best_threshold = 0.5
+    best_score = baseline_score
+
+    for threshold in np.unique(np.append(oof_scores, 0.5)):
+        score = metric_function(y_true, oof_scores >= threshold)
+        is_better_score = score > best_score
+        is_equal_but_closer_to_default = (
+            np.isclose(score, best_score)
+            and abs(threshold - 0.5) < abs(best_threshold - 0.5)
+        )
+        if is_better_score or is_equal_but_closer_to_default:
+            best_threshold = threshold
+            best_score = score
+
+    return {
+        "threshold": round(float(best_threshold), 6),
+        "oof_score": round(float(best_score), 4),
+        "oof_score_at_default_threshold": round(float(baseline_score), 4),
+    }
+
+
+def predict_with_threshold(
+    model_pipeline: Pipeline,
+    X: pd.DataFrame,
+    threshold: float,
+) -> np.ndarray:
+    """Predict binary class labels using a custom probability threshold."""
+
+    classifier = model_pipeline.named_steps["classifier"]
+    probabilities = model_pipeline.predict_proba(X)
+
+    return np.where(
+        probabilities[:, 1] >= threshold,
+        classifier.classes_[1],
+        classifier.classes_[0],
+    )

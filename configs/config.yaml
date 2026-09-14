@@ -1,5 +1,5 @@
 general:
-  experiment_name: seed_experiment
+  experiment_name: thresholds_exp
   seed: 7
 
 data:
@@ -59,6 +59,9 @@ submission:
   enabled: true
   id_column: PassengerId
   top_n_models: 2
+
+threshold_tuning:
+  enabled: true
 
 models:
   logistic_regression:
