@@ -1,6 +1,6 @@
 general:
-  experiment_name: new_features_2
-  seed: 0
+  experiment_name: seed_experiment
+  seed: 7
 
 data:
   train_path: data/raw/train.csv
@@ -17,9 +17,9 @@ features:
     - Fare
     - FamilySize
     - IsAlone
-#    - IsChild
 #    - TicketGroupSize
 #    - FarePerPerson
+#    - IsChild
   categorical:
     - Pclass
     - Sex
@@ -29,7 +29,8 @@ features:
 #    - SexPclass
     - AgeBand
 #    - FamilyCategory
-    - PclassAgeBand
+#    - PclassAgeBand
+    - TicketPrefix
 
 validation:
   n_splits: 5
